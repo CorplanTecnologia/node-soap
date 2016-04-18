@@ -18,10 +18,15 @@ describe('SOAP Client', function() {
       assert.ok(client);
       assert.ok(!client.getSoapHeaders());
 
-      client.addSoapHeader('header1');
-      client.addSoapHeader('header2');
+      var i1 = client.addSoapHeader('about-to-change-1');
+      var i2 = client.addSoapHeader('about-to-change-2');
 
+      assert.ok(i1 === 0);
+      assert.ok(i2 === 1);
       assert.ok(client.getSoapHeaders().length === 2);
+
+      client.changeSoapHeader(0, 'header1');
+      client.changeSoapHeader(1, 'header2');
       assert.ok(client.getSoapHeaders()[0] === 'header1');
       assert.ok(client.getSoapHeaders()[1] === 'header2');
 
@@ -67,6 +72,18 @@ describe('SOAP Client', function() {
         assert.equal(client.httpClient._request, myRequest);
         done();
       });
+  });
+
+  it('should allow customization of envelope', function(done) {
+    soap.createClient(__dirname+'/wsdl/default_namespace.wsdl', {envelopeKey: 'soapenv'}, function(err, client) {
+      assert.ok(client);
+      assert.ok(!err);
+
+      client.MyOperation({}, function(err, result) {
+        assert.notEqual(client.lastRequest.indexOf('xmlns:soapenv='), -1);
+        done();
+      });
+    });
   });
 
   it('should set binding style to "document" by default if not explicitly set in WSDL, per SOAP spec', function (done) {
@@ -197,6 +214,37 @@ describe('SOAP Client', function() {
       }, baseUrl);
     });
 
+    it('should have lastElapsedTime after a call with the time option passed', function(done) {
+      soap.createClient(__dirname+'/wsdl/default_namespace.wsdl', function(err, client) {
+        assert.ok(client);
+        assert.ok(!err);
+
+        client.MyOperation({}, function(err, result) {
+          assert.ok(result);
+          assert.ok(client.lastResponse);
+          assert.ok(client.lastResponseHeaders);
+          assert.ok(client.lastElapsedTime);
+
+          done();
+        }, {time: true}, {'test-header': 'test'});
+      }, baseUrl);
+    });
+
+    it('should add http headers in method call options', function(done) {
+      soap.createClient(__dirname+'/wsdl/default_namespace.wsdl', function(err, client) {
+        assert.ok(client);
+        assert.ok(!err);
+
+        client.MyOperation({}, function(err, result) {
+          assert.ok(result);
+          assert.ok(client.lastRequestHeaders['test-header']);
+          assert.ok(client.lastRequestHeaders['options-test-header']);
+
+          done();
+        }, {headers: {'options-test-header': 'test'}}, {'test-header': 'test'});
+      }, baseUrl);
+    });
+
     it('should not return error in the call and return the json in body', function(done) {
       soap.createClient(__dirname+'/wsdl/json_response.wsdl', function(err, client) {
         assert.ok(client);
@@ -225,6 +273,73 @@ describe('SOAP Client', function() {
           assert( !client.lastRequestHeaders.SOAPAction );
           done();
         }, null, {'test-header': 'test'});
+      }, baseUrl);
+    });
+
+    it('should allow calling the method with args, callback, options and extra headers', function(done) {
+      soap.createClient(__dirname+'/wsdl/json_response.wsdl', function(err, client) {
+        assert.ok(client);
+        assert.ok(!err);
+
+        client.MyOperation({}, function(err, result, body) {
+          assert.ok(!err);
+          assert.ok(result);
+          assert.ok(body.tempResponse === 'temp');
+          assert.ok(client.lastResponseHeaders.status === 'pass');
+          assert.ok(client.lastRequestHeaders['options-test-header'] === 'test');
+
+          done();
+        }, {headers: {'options-test-header': 'test'}}, {'test-header': 'test'});
+      }, baseUrl);
+    });
+
+    it('should allow calling the method with only a callback', function(done) {
+      soap.createClient(__dirname+'/wsdl/json_response.wsdl', function(err, client) {
+        assert.ok(client);
+        assert.ok(!err);
+
+        client.MyOperation(function(err, result, body) {
+          assert.ok(!err);
+          assert.ok(result);
+          assert.ok(body.tempResponse === 'temp');
+          assert.ok(client.lastResponseHeaders.status === 'fail');
+
+          done();
+        });
+      }, baseUrl);
+    });
+
+    it('should allow calling the method with args, options and callback last', function(done) {
+      soap.createClient(__dirname+'/wsdl/json_response.wsdl', function(err, client) {
+        assert.ok(client);
+        assert.ok(!err);
+
+        client.MyOperation({}, {headers: {'options-test-header': 'test'}}, function(err, result, body) {
+          assert.ok(!err);
+          assert.ok(result);
+          assert.ok(body.tempResponse === 'temp');
+          assert.ok(client.lastResponseHeaders.status === 'fail');
+          assert.ok(client.lastRequestHeaders['options-test-header'] === 'test');
+
+          done();
+        });
+      }, baseUrl);
+    });
+
+    it('should allow calling the method with args, options, extra headers and callback last', function(done) {
+      soap.createClient(__dirname+'/wsdl/json_response.wsdl', function(err, client) {
+        assert.ok(client);
+        assert.ok(!err);
+
+        client.MyOperation({}, {headers: {'options-test-header': 'test'}}, {'test-header': 'test'}, function(err, result, body) {
+          assert.ok(!err);
+          assert.ok(result);
+          assert.ok(body.tempResponse === 'temp');
+          assert.ok(client.lastResponseHeaders.status === 'pass');
+          assert.ok(client.lastRequestHeaders['options-test-header'] === 'test');
+
+          done();
+        });
       }, baseUrl);
     });
   });
@@ -267,7 +382,7 @@ describe('SOAP Client', function() {
       done();
     });
   });
-  
+
   it('should add http headers', function(done) {
     soap.createClient(__dirname+'/wsdl/default_namespace.wsdl', function(err, client) {
       assert.ok(client);
